@@ -1,54 +1,81 @@
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import type { ColorType, Transaction, InventoryState } from '@/inventory/types';
+import type { SyncStatus } from '@/types/auth';
+import { loadInventory, saveInventory, INITIAL_STATE } from '@/services/driveService';
 
-const STORAGE_KEY = 'audifonos-inventory-v1';
-
-// Transacciones iniciales - entrada de 500 audífonos (100 de cada color)
-const INITIAL_TRANSACTIONS: Transaction[] = [
-  { id: 'initial-1', type: 'entrada', color: 'azul', quantity: 100, date: new Date().toISOString(), notes: 'Pedido inicial de China' },
-  { id: 'initial-2', type: 'entrada', color: 'blanco', quantity: 100, date: new Date().toISOString(), notes: 'Pedido inicial de China' },
-  { id: 'initial-3', type: 'entrada', color: 'verde', quantity: 100, date: new Date().toISOString(), notes: 'Pedido inicial de China' },
-  { id: 'initial-4', type: 'entrada', color: 'rosa', quantity: 100, date: new Date().toISOString(), notes: 'Pedido inicial de China' },
-  { id: 'initial-5', type: 'entrada', color: 'negro', quantity: 100, date: new Date().toISOString(), notes: 'Pedido inicial de China' },
-];
-
-const INITIAL_STATE: InventoryState = {
-  products: {
-    azul: 100,
-    blanco: 100,
-    verde: 100,
-    rosa: 100,
-    negro: 100
-  },
-  transactions: INITIAL_TRANSACTIONS
-};
-
-export function useInventory() {
+export function useInventory(accessToken: string | null) {
   const [inventory, setInventory] = useState<InventoryState>(INITIAL_STATE);
   const [isLoaded, setIsLoaded] = useState(false);
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>('sincronizado');
+  const [lastSyncedAt, setLastSyncedAt] = useState<Date | null>(null);
+  const [syncError, setSyncError] = useState<string | null>(null);
 
-  // Cargar desde localStorage al iniciar
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingStateRef = useRef<InventoryState | null>(null);
+
+  // Load inventory from Drive on mount / when accessToken becomes available
   useEffect(() => {
-    const stored = localStorage.getItem(STORAGE_KEY);
-    if (stored) {
-      try {
-        const parsed = JSON.parse(stored);
-        setInventory(parsed);
-      } catch (e) {
-        console.error('Error parsing inventory:', e);
+    if (!accessToken) return;
+
+    let cancelled = false;
+
+    async function load() {
+      const result = await loadInventory(accessToken!);
+      if (cancelled) return;
+
+      if (result.data) {
+        setInventory(result.data);
+        setSyncError(result.error);
+      } else {
+        setInventory(INITIAL_STATE);
+        setSyncError(result.error);
+        setSyncStatus('error');
       }
+      setIsLoaded(true);
     }
-    setIsLoaded(true);
-  }, []);
 
-  // Guardar en localStorage cuando cambia el inventario
+    load();
+    return () => { cancelled = true; };
+  }, [accessToken]);
+
+  // Debounced Drive save
+  const triggerSave = useCallback((state: InventoryState) => {
+    if (!accessToken) return;
+
+    pendingStateRef.current = state;
+    setSyncStatus('sincronizando');
+    setSyncError(null);
+
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+
+    debounceRef.current = setTimeout(async () => {
+      const stateToSave = pendingStateRef.current;
+      if (!stateToSave || !accessToken) return;
+
+      const result = await saveInventory(accessToken, stateToSave);
+
+      if (result.error) {
+        setSyncStatus('error');
+        setSyncError(result.error);
+      } else {
+        setSyncStatus('sincronizado');
+        setLastSyncedAt(new Date());
+        setSyncError(null);
+      }
+    }, 500);
+  }, [accessToken]);
+
+  // Trigger save whenever inventory changes (only after initial load)
   useEffect(() => {
-    if (isLoaded) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(inventory));
-    }
-  }, [inventory, isLoaded]);
+    if (!isLoaded || !accessToken) return;
+    triggerSave(inventory);
+  }, [inventory, isLoaded, accessToken, triggerSave]);
+
+  const retrySync = useCallback(() => {
+    triggerSave(inventory);
+  }, [inventory, triggerSave]);
 
   const addEntry = useCallback((color: ColorType, quantity: number, notes?: string) => {
     const transaction: Transaction = {
@@ -57,56 +84,43 @@ export function useInventory() {
       color,
       quantity,
       date: new Date().toISOString(),
-      notes
+      notes,
     };
-
     setInventory(prev => ({
-      products: {
-        ...prev.products,
-        [color]: prev.products[color] + quantity
-      },
-      transactions: [transaction, ...prev.transactions]
+      products: { ...prev.products, [color]: prev.products[color] + quantity },
+      transactions: [transaction, ...prev.transactions],
     }));
   }, []);
 
   const addExit = useCallback((color: ColorType, quantity: number, notes?: string) => {
     const currentStock = inventory.products[color];
-
     if (quantity > currentStock) {
       return { success: false, error: `Stock insuficiente. Solo hay ${currentStock} unidades disponibles.` };
     }
-
     const transaction: Transaction = {
       id: Date.now().toString(),
       type: 'salida',
       color,
       quantity,
       date: new Date().toISOString(),
-      notes
+      notes,
     };
-
     setInventory(prev => ({
-      products: {
-        ...prev.products,
-        [color]: prev.products[color] - quantity
-      },
-      transactions: [transaction, ...prev.transactions]
+      products: { ...prev.products, [color]: prev.products[color] - quantity },
+      transactions: [transaction, ...prev.transactions],
     }));
-
     return { success: true };
   }, [inventory.products]);
 
   const addMultiExit = useCallback((items: { color: ColorType; quantity: number }[], notes?: string) => {
-    // Verificar stock suficiente
     for (const item of items) {
       if (item.quantity > inventory.products[item.color]) {
         return {
           success: false,
-          error: `Stock insuficiente para ${item.color}. Solo hay ${inventory.products[item.color]} unidades disponibles.`
+          error: `Stock insuficiente para ${item.color}. Solo hay ${inventory.products[item.color]} unidades disponibles.`,
         };
       }
     }
-
     const timestamp = Date.now().toString();
     const newTransactions: Transaction[] = items.map((item, index) => ({
       id: `${timestamp}-${index}`,
@@ -114,21 +128,13 @@ export function useInventory() {
       color: item.color,
       quantity: item.quantity,
       date: new Date().toISOString(),
-      notes
+      notes,
     }));
-
     setInventory(prev => {
       const newProducts = { ...prev.products };
-      items.forEach(item => {
-        newProducts[item.color] -= item.quantity;
-      });
-
-      return {
-        products: newProducts,
-        transactions: [...newTransactions, ...prev.transactions]
-      };
+      items.forEach(item => { newProducts[item.color] -= item.quantity; });
+      return { products: newProducts, transactions: [...newTransactions, ...prev.transactions] };
     });
-
     return { success: true };
   }, [inventory.products]);
 
@@ -141,26 +147,26 @@ export function useInventory() {
   }, [inventory.products]);
 
   const getTotalEntries = useCallback(() => {
-    return inventory.transactions
-      .filter(t => t.type === 'entrada')
-      .reduce((a, t) => a + t.quantity, 0);
+    return inventory.transactions.filter(t => t.type === 'entrada').reduce((a, t) => a + t.quantity, 0);
   }, [inventory.transactions]);
 
   const getTotalExits = useCallback(() => {
-    return inventory.transactions
-      .filter(t => t.type === 'salida')
-      .reduce((a, t) => a + t.quantity, 0);
+    return inventory.transactions.filter(t => t.type === 'salida').reduce((a, t) => a + t.quantity, 0);
   }, [inventory.transactions]);
 
   return {
     inventory,
     isLoaded,
+    syncStatus,
+    lastSyncedAt,
+    syncError,
+    retrySync,
     addEntry,
     addExit,
     addMultiExit,
     resetInventory,
     getTotalStock,
     getTotalEntries,
-    getTotalExits
+    getTotalExits,
   };
 }

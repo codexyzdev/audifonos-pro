@@ -1,5 +1,6 @@
 'use client';
 
+import { useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import { useInventory } from '@/inventory/hooks/use-inventory';
@@ -10,20 +11,54 @@ import { StatsCard } from '@/inventory/components/stats-card';
 import { TransactionHistory } from '@/inventory/components/transaction-history';
 import { AnimatedBackground } from '@/shared/components/animated-background';
 import { AppHeader } from '@/shared/components/app-header';
+import { LoginScreen } from '@/components/LoginScreen';
+import { SyncIndicator } from '@/components/SyncIndicator';
+import { UserProfile } from '@/components/UserProfile';
+import { useAuth } from '@/contexts/AuthContext';
 import type { ColorType } from '@/inventory/types';
 import { Package, TrendingUp, TrendingDown, Zap } from 'lucide-react';
 
 export function InventoryDashboard() {
+  const { user, signOut } = useAuth();
+
   const {
     inventory,
     isLoaded,
+    syncStatus,
+    lastSyncedAt,
+    syncError,
+    retrySync,
     addEntry,
     addMultiExit,
     resetInventory,
     getTotalStock,
     getTotalEntries,
     getTotalExits,
-  } = useInventory();
+  } = useInventory(user?.accessToken ?? null);
+
+  // Handle auth errors from Drive sync
+  useEffect(() => {
+    if (syncError === 'AUTH_ERROR') {
+      signOut();
+    }
+  }, [syncError, signOut]);
+
+  if (!user) {
+    return <LoginScreen />;
+  }
+
+  if (!isLoaded) {
+    return (
+      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
+        <motion.div
+          animate={{ rotate: 360 }}
+          transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
+        >
+          <Zap className="w-10 h-10 text-violet-500" />
+        </motion.div>
+      </div>
+    );
+  }
 
   const handleEntry = (color: ColorType, quantity: number, notes?: string) => {
     addEntry(color, quantity, notes);
@@ -48,25 +83,25 @@ export function InventoryDashboard() {
     }
   };
 
-  if (!isLoaded) {
-    return (
-      <div className="min-h-screen bg-gray-950 flex items-center justify-center">
-        <motion.div
-          animate={{ rotate: 360 }}
-          transition={{ duration: 0.8, repeat: Infinity, ease: 'linear' }}
-        >
-          <Zap className="w-10 h-10 text-violet-500" />
-        </motion.div>
-      </div>
-    );
-  }
-
   return (
     <div className="min-h-screen bg-gray-950 relative overflow-hidden">
       <AnimatedBackground />
 
       <div className="relative z-10">
-        <AppHeader onReset={resetInventory} />
+        <AppHeader
+          onReset={resetInventory}
+          rightSlot={
+            <div className="flex items-center gap-3">
+              <SyncIndicator
+                status={syncStatus}
+                lastSyncedAt={lastSyncedAt}
+                error={syncError}
+                onRetry={retrySync}
+              />
+              <UserProfile />
+            </div>
+          }
+        />
 
         <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
           {/* Stats Row */}

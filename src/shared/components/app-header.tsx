@@ -5,9 +5,10 @@ import { Headphones, RotateCcw, Sparkles } from 'lucide-react'
 
 interface AppHeaderProps {
   onReset: () => void
+  rightSlot?: React.ReactNode
 }
 
-export function AppHeader({ onReset }: AppHeaderProps) {
+export function AppHeader({ onReset, rightSlot }: AppHeaderProps) {
   const handleReset = () => {
     if (confirm('¿Estás seguro de reiniciar el inventario? Se perderán todos los datos.')) {
       onReset()
@@ -41,20 +42,23 @@ export function AppHeader({ onReset }: AppHeaderProps) {
             </div>
           </div>
 
-          <button
-            onClick={handleReset}
-            className="
-              p-2.5 rounded-xl
-              bg-gray-800/50 hover:bg-gray-700/50
-              text-gray-400 hover:text-white
-              border border-white/10 hover:border-white/20
-              transition-all duration-150
-              flex items-center gap-2
-            "
-          >
-            <RotateCcw className="w-4 h-4" />
-            <span className="hidden sm:inline text-sm">Reiniciar</span>
-          </button>
+          <div className="flex items-center gap-3">
+            {rightSlot}
+            <button
+              onClick={handleReset}
+              className="
+                p-2.5 rounded-xl
+                bg-gray-800/50 hover:bg-gray-700/50
+                text-gray-400 hover:text-white
+                border border-white/10 hover:border-white/20
+                transition-all duration-150
+                flex items-center gap-2
+              "
+            >
+              <RotateCcw className="w-4 h-4" />
+              <span className="hidden sm:inline text-sm">Reiniciar</span>
+            </button>
+          </div>
         </div>
       </div>
     </header>
