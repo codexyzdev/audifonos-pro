@@ -17,11 +17,11 @@ function formatTime(date: Date): string {
 export function SyncIndicator({ status, lastSyncedAt, error, onRetry }: SyncIndicatorProps) {
   if (status === 'sincronizado') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700">
-        <CheckCircle className="w-3.5 h-3.5" />
-        Sincronizado
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-green-100 text-green-700 whitespace-nowrap">
+        <CheckCircle className="w-3.5 h-3.5 shrink-0" />
+        <span className="hidden sm:inline">Sincronizado</span>
         {lastSyncedAt && (
-          <span className="text-green-600 opacity-75">· {formatTime(lastSyncedAt)}</span>
+          <span className="text-green-600 opacity-75">{formatTime(lastSyncedAt)}</span>
         )}
       </span>
     );
@@ -29,21 +29,21 @@ export function SyncIndicator({ status, lastSyncedAt, error, onRetry }: SyncIndi
 
   if (status === 'sincronizando') {
     return (
-      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700">
-        <RefreshCw className="w-3.5 h-3.5 animate-spin" />
-        Sincronizando…
+      <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-amber-100 text-amber-700 whitespace-nowrap">
+        <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+        <span className="hidden sm:inline">Sincronizando…</span>
       </span>
     );
   }
 
   // error
   return (
-    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700">
-      <AlertCircle className="w-3.5 h-3.5" />
-      {error ?? 'Error al sincronizar'}
+    <span className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-red-100 text-red-700 whitespace-nowrap">
+      <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+      <span className="hidden sm:inline">{error ?? 'Error'}</span>
       <button
         onClick={onRetry}
-        className="ml-1 underline hover:no-underline focus:outline-none"
+        className="underline hover:no-underline focus:outline-none"
         aria-label="Reintentar sincronización"
       >
         Reintentar

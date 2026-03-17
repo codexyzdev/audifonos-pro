@@ -12,7 +12,6 @@ import { TransactionHistory } from '@/inventory/components/transaction-history';
 import { AnimatedBackground } from '@/shared/components/animated-background';
 import { AppHeader } from '@/shared/components/app-header';
 import { LoginScreen } from '@/components/LoginScreen';
-import { SyncIndicator } from '@/components/SyncIndicator';
 import { UserProfile } from '@/components/UserProfile';
 import { useAuth } from '@/contexts/AuthContext';
 import type { ColorType } from '@/inventory/types';
@@ -30,7 +29,6 @@ export function InventoryDashboard() {
     retrySync,
     addEntry,
     addMultiExit,
-    resetInventory,
     getTotalStock,
     getTotalEntries,
     getTotalExits,
@@ -89,17 +87,13 @@ export function InventoryDashboard() {
 
       <div className="relative z-10">
         <AppHeader
-          onReset={resetInventory}
           rightSlot={
-            <div className="flex items-center gap-3">
-              <SyncIndicator
-                status={syncStatus}
-                lastSyncedAt={lastSyncedAt}
-                error={syncError}
-                onRetry={retrySync}
-              />
-              <UserProfile />
-            </div>
+            <UserProfile
+              syncStatus={syncStatus}
+              lastSyncedAt={lastSyncedAt}
+              syncError={syncError}
+              onRetry={retrySync}
+            />
           }
         />
 
@@ -169,7 +163,7 @@ export function InventoryDashboard() {
         <footer className="border-t border-white/10 mt-8">
           <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
             <p className="text-center text-gray-500 text-sm">
-              Audífonos Pro © 2024 • Gestión de Inventario Inteligente
+              Audífonos Pro © 2026 • Gestión de Inventario Inteligente
             </p>
           </div>
         </footer>
