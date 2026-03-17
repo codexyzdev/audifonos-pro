@@ -8,6 +8,7 @@ export interface AuthUser {
 export interface AuthContextValue {
   user: AuthUser | null;
   isLoading: boolean;
+  isRestoring: boolean;
   error: string | null;
   signIn: () => void;
   signOut: () => void;
