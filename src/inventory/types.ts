@@ -14,7 +14,7 @@ export interface InventoryState {
   transactions: Transaction[];
 }
 
-export const COLOR_CONFIG: Record<ColorType, { name: string; gradient: string; hex: string; glow: string }> = {
+export const COLOR_CONFIG: Record<ColorType, { name: string; gradient: string; hex: string; glow: string; textShadow?: string }> = {
   azul: {
     name: 'Azul',
     gradient: 'from-blue-500 to-cyan-400',
@@ -43,6 +43,7 @@ export const COLOR_CONFIG: Record<ColorType, { name: string; gradient: string; h
     name: 'Negro',
     gradient: 'from-gray-800 to-black',
     hex: '#1F2937',
-    glow: 'shadow-gray-500/50'
+    glow: 'shadow-gray-500/50',
+    textShadow: '[-webkit-text-stroke:1.5px_rgba(255,255,255,0.7)]'
   }
 };

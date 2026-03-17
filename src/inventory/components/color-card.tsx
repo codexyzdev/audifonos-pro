@@ -77,6 +77,7 @@ export function ColorCard({ color, quantity, maxQuantity = 100 }: ColorCardProps
           <span className={`
             text-4xl font-black tracking-tight
             bg-gradient-to-r ${config.gradient} bg-clip-text text-transparent
+            ${config.textShadow ?? ''} [-webkit-text-stroke:1px_rgba(255,255,255,0.4)]
           `}>
             {quantity}
           </span>
