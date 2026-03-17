@@ -5,6 +5,25 @@ import { googleLogout, useGoogleLogin } from '@react-oauth/google';
 import type { AuthContextValue, AuthUser } from '@/types/auth';
 
 const AUTH_HINT_KEY = 'audifonos-auth-hint';
+const SCOPE = 'openid email profile https://www.googleapis.com/auth/drive.appdata';
+
+declare global {
+  interface Window {
+    google?: {
+      accounts: {
+        oauth2: {
+          initTokenClient: (config: {
+            client_id: string;
+            scope: string;
+            hint?: string;
+            prompt?: string;
+            callback: (response: { access_token?: string; error?: string }) => void;
+          }) => { requestAccessToken: (opts?: { prompt?: string }) => void };
+        };
+      };
+    };
+  }
+}
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
@@ -22,12 +41,38 @@ async function fetchUserInfo(accessToken: string): Promise<AuthUser> {
   };
 }
 
+/** Silent restore using the native GIS tokenClient (no popup, no prompt). */
+function trySilentRestore(
+  clientId: string,
+  hint: string,
+  onSuccess: (token: string) => void,
+  onError: () => void
+) {
+  if (typeof window === 'undefined' || !window.google?.accounts?.oauth2) {
+    onError();
+    return;
+  }
+  const client = window.google.accounts.oauth2.initTokenClient({
+    client_id: clientId,
+    scope: SCOPE,
+    hint,
+    prompt: '',
+    callback: (response: { access_token?: string; error?: string }) => {
+      if (response.access_token) {
+        onSuccess(response.access_token);
+      } else {
+        onError();
+      }
+    },
+  });
+  client.requestAccessToken({ prompt: '' });
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [isRestoring, setIsRestoring] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const silentLoginRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
     if (!process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID) {
@@ -42,7 +87,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const login = useGoogleLogin({
-    scope: 'openid email profile https://www.googleapis.com/auth/drive.appdata',
+    scope: SCOPE,
     onSuccess: async (tokenResponse) => {
       setIsLoading(true);
       setError(null);
@@ -71,39 +116,53 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     },
   });
 
-  const silentLogin = useGoogleLogin({
-    scope: 'openid email profile https://www.googleapis.com/auth/drive.appdata',
-    prompt: 'none',
-    hint: undefined,
-    onSuccess: async (tokenResponse) => {
-      try {
-        await handleTokenResponse(tokenResponse.access_token);
-      } catch {
-        // silent fail — user will see login screen
-      } finally {
-        setIsRestoring(false);
-      }
-    },
-    onError: () => {
-      // silent fail — user will see login screen normally
-      setIsRestoring(false);
-    },
-  });
-
-  // Store ref so we can call it from useEffect
+  // Attempt silent restore on mount using native GIS API with the stored hint
+  const restoredRef = useRef(false);
   useEffect(() => {
-    silentLoginRef.current = () => silentLogin();
-  }, [silentLogin]);
+    if (restoredRef.current) return;
+    restoredRef.current = true;
 
-  // Attempt silent restore on mount if we have a hint
-  useEffect(() => {
     const hint = localStorage.getItem(AUTH_HINT_KEY);
-    if (!hint) return;
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+    if (!hint || !clientId) return;
+
     setIsRestoring(true);
-    // Small delay to ensure GoogleOAuthProvider is ready
-    const t = setTimeout(() => silentLoginRef.current?.(), 300);
-    return () => clearTimeout(t);
-  }, []);
+
+    // Wait for the GIS script to be ready
+    const attempt = () => {
+      trySilentRestore(
+        clientId,
+        hint,
+        async (token) => {
+          try {
+            await handleTokenResponse(token);
+          } catch {
+            // silent fail
+          } finally {
+            setIsRestoring(false);
+          }
+        },
+        () => setIsRestoring(false)
+      );
+    };
+
+    if (window.google?.accounts?.oauth2) {
+      attempt();
+    } else {
+      // Poll until GIS script loads (max ~3s)
+      let tries = 0;
+      const interval = setInterval(() => {
+        tries++;
+        if (window.google?.accounts?.oauth2) {
+          clearInterval(interval);
+          attempt();
+        } else if (tries >= 15) {
+          clearInterval(interval);
+          setIsRestoring(false);
+        }
+      }, 200);
+    }
+  }, [handleTokenResponse]);
 
   const signIn = useCallback(() => {
     setError(null);
